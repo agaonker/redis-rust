@@ -1,5 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
+
+use crate::protocol::RespValue;
 
 pub type SharedStore = Arc<Mutex<Store>>;
 
@@ -7,10 +9,31 @@ pub fn shared_store() -> SharedStore {
     Arc::new(Mutex::new(Store::new()))
 }
 
-/// The value stored for a key. More variants added in Phase 2.
+/// The value stored for a key.
 #[derive(Debug, Clone)]
 pub enum StoreValue {
     Str(Vec<u8>),
+    List(VecDeque<Vec<u8>>),
+    Hash(HashMap<Vec<u8>, Vec<u8>>),
+    Set(HashSet<Vec<u8>>),
+}
+
+impl StoreValue {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            StoreValue::Str(_)  => "string",
+            StoreValue::List(_) => "list",
+            StoreValue::Hash(_) => "hash",
+            StoreValue::Set(_)  => "set",
+        }
+    }
+}
+
+/// Standard Redis WRONGTYPE error response.
+pub fn wrong_type_error() -> RespValue {
+    RespValue::Error(
+        "WRONGTYPE Operation against a key holding the wrong kind of value".into(),
+    )
 }
 
 /// The in-memory store. Held behind Arc<Mutex<Store>> — never lock across .await.
@@ -38,6 +61,43 @@ impl Store {
 
     pub fn exists(&self, keys: &[Vec<u8>]) -> u64 {
         keys.iter().filter(|k| self.inner.contains_key(*k)).count() as u64
+    }
+
+    pub fn get_mut(&mut self, key: &[u8]) -> Option<&mut StoreValue> {
+        self.inner.get_mut(key)
+    }
+
+    /// Gets the list at `key`, inserting an empty one if the key is absent.
+    pub fn get_or_insert_list(&mut self, key: Vec<u8>) -> &mut VecDeque<Vec<u8>> {
+        let entry = self.inner
+            .entry(key)
+            .or_insert_with(|| StoreValue::List(VecDeque::new()));
+        match entry {
+            StoreValue::List(l) => l,
+            _ => unreachable!("caller checked type before calling get_or_insert_list"),
+        }
+    }
+
+    /// Gets the hash at `key`, inserting an empty one if the key is absent.
+    pub fn get_or_insert_hash(&mut self, key: Vec<u8>) -> &mut HashMap<Vec<u8>, Vec<u8>> {
+        let entry = self.inner
+            .entry(key)
+            .or_insert_with(|| StoreValue::Hash(HashMap::new()));
+        match entry {
+            StoreValue::Hash(h) => h,
+            _ => unreachable!("caller checked type before calling get_or_insert_hash"),
+        }
+    }
+
+    /// Gets the set at `key`, inserting an empty one if the key is absent.
+    pub fn get_or_insert_set(&mut self, key: Vec<u8>) -> &mut HashSet<Vec<u8>> {
+        let entry = self.inner
+            .entry(key)
+            .or_insert_with(|| StoreValue::Set(HashSet::new()));
+        match entry {
+            StoreValue::Set(s) => s,
+            _ => unreachable!("caller checked type before calling get_or_insert_set"),
+        }
     }
 }
 

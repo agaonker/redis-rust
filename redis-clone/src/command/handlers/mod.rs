@@ -4,3 +4,6 @@ pub mod set;
 pub mod get;
 pub mod del;
 pub mod exists;
+pub mod list;
+pub mod hash;
+pub mod set_cmd;

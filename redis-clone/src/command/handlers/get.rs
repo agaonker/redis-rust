@@ -1,5 +1,5 @@
 use crate::protocol::RespValue;
-use crate::store::{SharedStore, StoreValue};
+use crate::store::{wrong_type_error, SharedStore, StoreValue};
 
 pub fn handle_get(args: &[Vec<u8>], store: &SharedStore) -> RespValue {
     if args.len() != 1 {
@@ -8,5 +8,6 @@ pub fn handle_get(args: &[Vec<u8>], store: &SharedStore) -> RespValue {
     match store.lock().unwrap().get(&args[0]) {
         None => RespValue::BulkString(None),
         Some(StoreValue::Str(v)) => RespValue::BulkString(Some(v.clone())),
+        Some(_) => wrong_type_error(),
     }
 }
