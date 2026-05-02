@@ -5,8 +5,9 @@ use tracing::{debug, warn};
 
 use crate::command::{dispatch, Command};
 use crate::protocol::{parse, serialize, ParseOutcome, RespValue};
+use crate::store::SharedStore;
 
-pub async fn handle_connection(mut socket: TcpStream) -> std::io::Result<()> {
+pub async fn handle_connection(mut socket: TcpStream, store: SharedStore) -> std::io::Result<()> {
     let mut buf = BytesMut::with_capacity(4096);
 
     loop {
@@ -25,7 +26,7 @@ pub async fn handle_connection(mut socket: TcpStream) -> std::io::Result<()> {
                     buf.advance(consumed);
 
                     let response = match Command::try_from(value) {
-                        Ok(cmd) => dispatch(cmd),
+                        Ok(cmd) => dispatch(cmd, &store),
                         Err(e) => RespValue::Error(format!("ERR {}", e)),
                     };
                     socket.write_all(&serialize(&response)).await?;
