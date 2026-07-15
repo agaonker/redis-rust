@@ -1,8 +1,13 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
 
 use crate::protocol::RespValue;
 
+/// Shared, async-locked handle to the store. Tokio mutex (not std) so the
+/// lock can be acquired across `.await` points without blocking the runtime
+/// and so contending tasks queue fairly instead of CPU-spinning.
 pub type SharedStore = Arc<Mutex<Store>>;
 
 pub fn shared_store() -> SharedStore {
@@ -36,7 +41,9 @@ pub fn wrong_type_error() -> RespValue {
     )
 }
 
-/// The in-memory store. Held behind Arc<Mutex<Store>> — never lock across .await.
+/// The in-memory store. Held behind `Arc<tokio::sync::Mutex<Store>>`.
+/// Lock is acquired once per command in `dispatch`; sync handlers operate
+/// on the locked guard via `&mut Store`.
 #[derive(Debug, Default)]
 pub struct Store {
     inner: HashMap<Vec<u8>, StoreValue>,
